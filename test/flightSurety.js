@@ -129,4 +129,21 @@ contract('Flight Surety Tests', async (accounts) => {
     assert.equal(result, true, "Non-owner airline should be able to register another airline after inital 4 are registered");
   });
 
+  it('(airline) can vote for other airline', async () => {
+    let airlineToVote = 'Stars trans';
+    let result = true;
+    let newAirlineAddress = accounts[6];
+    try {
+        // register new airline
+        await config.flightSuretyApp.registerAirline(airlineToVote, newAirlineAddress, {from: newAirlineAddress, value: web3.utils.toWei('10', 'ether')});     
+        // vote for new airline
+        await config.flightSuretyApp.vote(airlineToVote);
+    } catch (e) {
+        console.log("e", e);
+        result = false;
+    }
+
+    assert.equal(result, true, "Airline should be able to vote for other airline");
+  });
+
 });

@@ -18,6 +18,8 @@ contract FlightSuretyData {
     uint256 private registeredFlightNum = 0;
 
     mapping(string => SharedData.Airline) private airlines;
+    mapping(address => string) private airlineAddressMap;
+    mapping(string => address[]) private airlineVoters;
     mapping(string => uint256) private airlineFunds;
 
     /********************************************************************************************/
@@ -84,6 +86,13 @@ contract FlightSuretyData {
             return airlines[airlineName].ownerAddress != address(0);
     }
 
+    function eligibleVote(string memory airlineName) 
+        external
+        view
+        returns(bool) {
+            return airlines[airlineName].votes < registeredAirlineNum.div(2);
+        }
+
 
     /**
     * @dev Sets contract operations on/off
@@ -104,6 +113,14 @@ contract FlightSuretyData {
         return msg.sender == contractOwner;
     }
 
+    function getAirlineVotes(string memory airlineName) external view returns(uint256) {
+        return airlines[airlineName].votes;
+    }
+
+    function getAirlineVoters(string memory airlineName) external view returns(address[] memory) {
+        return airlineVoters[airlineName];
+    }
+
     /********************************************************************************************/
     /*                                     SMART CONTRACT FUNCTIONS                             */
     /********************************************************************************************/
@@ -121,8 +138,19 @@ contract FlightSuretyData {
         SharedData.Airline memory newAirline = SharedData.Airline(airlineName, airlineAddress, status, votes);
         airlines[airlineName] = newAirline;
         registeredAirlineNum = registeredAirlineNum.add(1);
+        airlineAddressMap[airlineAddress] = airlineName;
         emit AirlineRegistered(newAirline);
     }
+
+    function vote(
+        string memory airlineName
+    ) external requireOperational {
+        SharedData.Airline memory airline = airlines[airlineName];
+        require(airline.votes < 5, "Unable to vote for airline");
+        airline.votes = airline.votes.add(1);
+
+        airlineVoters[airlineName].push(msg.sender);
+    } 
 
 
    /**

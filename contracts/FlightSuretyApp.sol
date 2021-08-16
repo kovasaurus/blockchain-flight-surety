@@ -135,6 +135,7 @@ contract FlightSuretyApp {
         external payable requireOperational {
             require(bytes(airlineName).length > 0, "Airline name can not be empty");
             if (dataContract.getNumberOfRegisteredAirlines() <= AIRLINE_REGISTRATION_VOTING_THRESHOLD) {
+ //              require(dataContract.isOwner(), "Owner must register first 4 airlines");
                uint256 feeAmount = msg.value;
                require(isFeeSufficient(feeAmount), "Registration fee sent is too low");
                dataContract.registerAirline(
@@ -144,7 +145,6 @@ contract FlightSuretyApp {
                    5
                );
             } else {
-                require(dataContract.isOwner(), "Owner must register first 4 airlines");
                 dataContract.registerAirline(
                    airlineAddress,
                    airlineName,
@@ -177,8 +177,18 @@ contract FlightSuretyApp {
             dataContract.fundAirline(airlineName); // maybe add msg.value
     }
 
-    function vote() external {
-        
+    function vote(string memory airlineName) 
+        external
+        requireOperational {
+            require(bytes(airlineName).length > 0, "Require airline name to vote for");
+            require(dataContract.isRegistered(airlineName), "Airline must be registered");
+            require(dataContract.eligibleVote(airlineName), "Airline can not be voted for");
+            address[] memory airlineVoters = dataContract.getAirlineVoters(airlineName);
+            for (uint256 i = 0; i < airlineVoters.length; i++) {
+                require(airlineVoters[i] != msg.sender, "You alreay voted for this airline");
+            }
+            dataContract.vote(airlineName);
+
     }
 
 
