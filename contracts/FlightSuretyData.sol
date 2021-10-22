@@ -18,9 +18,13 @@ contract FlightSuretyData {
     uint256 private registeredFlightNum = 0;
 
     mapping(string => SharedData.Airline) private airlines;
+    mapping(string => SharedData.Flight) private flights;
     mapping(address => string) private airlineAddressMap;
     mapping(string => address[]) private airlineVoters;
     mapping(string => uint256) private airlineFunds;
+    mapping(string => mapping(address => SharedData.Insurance)) private flightInsurance;
+    mapping(string => address[]) private flightInsurees;
+    mapping(address => uint256) private insurancePayout;
 
     /********************************************************************************************/
     /*                                       EVENT DEFINITIONS                                  */
@@ -28,6 +32,7 @@ contract FlightSuretyData {
 
     event AirlineRegistered(SharedData.Airline airline);
     event AirlineFunded(string airlineName, uint256 amount);
+    event FlightRegistered(SharedData.Flight flight);
 
     /**
     * @dev Constructor
@@ -121,6 +126,14 @@ contract FlightSuretyData {
         return airlineVoters[airlineName];
     }
 
+    function isAirlineOwner(string memory airlineName, address sender) external view returns (bool) {
+        return sender == airlines[airlineName].ownerAddress;
+    }
+
+    function isFlightRegistered(string memory flightName) external view returns (bool) {
+        return flights[flightName].isRegistered;
+    }
+
     /********************************************************************************************/
     /*                                     SMART CONTRACT FUNCTIONS                             */
     /********************************************************************************************/
@@ -152,29 +165,60 @@ contract FlightSuretyData {
         airlineVoters[airlineName].push(msg.sender);
     } 
 
+    function registerFlight (
+        string memory airlineName,
+        string memory flightName,
+        uint256 flightTime
+    ) external requireOperational {
+        SharedData.Flight memory newFlight = SharedData.Flight(true, 0, flightName, flightTime, airlineName);
+        registeredFlightNum = registeredFlightNum.add(1);
+        flights[flightName] = newFlight;
+        emit FlightRegistered(newFlight);
+    }
+
 
    /**
     * @dev Buy insurance for a flight
     *
     */   
-    function buy
-                            (                             
-                            )
-                            external
-                            payable
+    function buy (
+        string memory flight,
+        address airline,
+        address passenger,
+        uint256 amount
+    )
+        external
+        payable
+        requireOperational
     {
+        flightInsurance[flight][passenger] = SharedData.Insurance({
+            isInsured: true,
+            airline: airline,
+            flight: flight,
+            passenger: passenger,
+            amount: amount
+        });
 
+        flightInsurees[flight].push(passenger);
     }
+
+    function getInsuredPassengers(string memory flight) external view returns(address[] memory) {
+        return flightInsurees[flight];
+    }
+
+    function getInsuranceAmount(address passenger, string memory flight) external view returns(uint256) {
+        return flightInsurance[flight][passenger].amount;
+    } 
 
     /**
      *  @dev Credits payouts to insurees
     */
-    function creditInsurees
-                                (
-                                )
-                                external
-                                pure
-    {
+    function creditInsurees (address passenger, uint256 amount) external {
+        insurancePayout[passenger] = amount;
+    }
+
+    function getPassengersCredit (address passenger) external view returns(uint256) {
+        return insurancePayout[passenger];
     }
     
 

@@ -18,7 +18,16 @@ library SharedData {
     struct Flight {
         bool isRegistered;
         uint8 statusCode;
-        uint256 updatedTimestamp;        
+        string name;
+        uint256 time;        
+        string airline;
+    }
+
+    struct Insurance {
+        bool isInsured;
         address airline;
+        string flight;
+        address passenger;
+        uint256 amount;
     }
 }

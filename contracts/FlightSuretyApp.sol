@@ -56,7 +56,7 @@ contract FlightSuretyApp {
 
 
 
-    mapping(bytes32 => SharedData.Flight) private flights;
+    mapping(string => SharedData.Flight) private flights;
     mapping(address => Oracle) private oracles;     // Track all registered oracles
     
     mapping(bytes32 => ResponseInfo) private oracleResponses;  // Track all oracle responses // Key = hash(index, flight, timestamp)
@@ -69,8 +69,8 @@ contract FlightSuretyApp {
     // Oracles track this and if they have a matching index
     // they fetch data and submit a response
     event OracleRequest(uint8 index, address airline, string flight, uint256 timestamp);
-
-
+    event InsurancePurchased(string flight, address passanger, uint256 amount);
+    event CreditWithdrawn(address passenger, uint256 amount);
  
     /********************************************************************************************/
     /*                                       FUNCTION MODIFIERS                                 */
@@ -95,6 +95,11 @@ contract FlightSuretyApp {
     */
     modifier requireContractOwner(){
         require(msg.sender == contractOwner, "Caller is not contract owner");
+        _;
+    }
+
+    modifier correctInsuranceAmount() {
+        require(msg.value > 0 ether && msg.value <= 1 ether, "Insurance needs to be between 0 and 1 ether");
         _;
     }
 
@@ -196,14 +201,35 @@ contract FlightSuretyApp {
     * @dev Register a future flight for insuring.
     *
     */  
-    function registerFlight
-                                (
-                                )
-                                external
-                                pure
-    {
-
+    function registerFlight(string memory airlineName, string memory flightName, uint256 flightTime)
+        external
+        requireOperational {
+            require(bytes(airlineName).length > 0, "Require airline name");
+            require(bytes(flightName).length > 0, "Require flight name");
+            require(!dataContract.isFlightRegistered(flightName), "Flight already registered");
+            require(dataContract.isAirlineOwner(airlineName, msg.sender), "Not airline owner");
+            dataContract.registerFlight(airlineName, flightName, flightTime);
     }
+
+    function buyInsurance(
+        address airline,
+        string memory flightName
+    )
+        external
+        payable
+        correctInsuranceAmount
+        requireOperational {
+            require(dataContract.isFlightRegistered(flightName), "Flight must be registered");
+            dataContract.buy(flightName, airline, msg.sender, msg.value);
+            emit InsurancePurchased(flightName, msg.sender, msg.value);
+    }
+
+    function withdrawCredit() public payable requireOperational {
+        uint256 credit = dataContract.getPassengersCredit(msg.sender);
+        payable(msg.sender).transfer(credit);
+        emit CreditWithdrawn(msg.sender, credit);
+    }
+
     
    /**
     * @dev Called after oracle has updated flight status
@@ -216,9 +242,22 @@ contract FlightSuretyApp {
                                     uint256 timestamp,
                                     uint8 statusCode
                                 )
-                                internal
-                                pure
+                                public
     {
+        require(dataContract.isFlightRegistered(flight));
+        flights[flight].statusCode = statusCode;
+        if(statusCode >= 20) {
+            address[] memory flightInsurees = dataContract.getInsuredPassengers(flight);
+            for(uint i = 0; i < flightInsurees.length; i++) {
+                uint256 insuranceAmount = dataContract.getInsuranceAmount(flightInsurees[i], flight);
+                uint256 credit = insuranceAmount.mul(3).div(2);
+                dataContract.creditInsurees(flightInsurees[i], credit);
+            }
+        }
+    }
+
+    function getPassengersCredit(address passenger) public view returns(uint256) {
+        return dataContract.getPassengersCredit(passenger);
     }
 
 
@@ -228,28 +267,22 @@ contract FlightSuretyApp {
                             string memory flight,
                             uint256 timestamp                            
                         )
-                        external {
+                        external requireOperational {
         uint8 index = getRandomIndex(msg.sender);
 
         // Generate a unique key for storing the request
         bytes32 key = keccak256(abi.encodePacked(index, airline, flight, timestamp));
         oracleResponses[key].requester = msg.sender;
         oracleResponses[key].isOpen = true;
-        // oracleResponses[key] = ResponseInfo({
-        //                                         requester: msg.sender,
-        //                                         isOpen: true
-        //                                     });
 
         emit OracleRequest(index, airline, flight, timestamp);
-    } 
-
-
-// region ORACLE MANAGEMENT    
+    }
 
     // Register an oracle with the contract
     function registerOracle ()
         external
-        payable {
+        payable 
+        requireOperational {
             // Require registration fee
             require(msg.value >= REGISTRATION_FEE, "Registration fee is required");
 
@@ -261,12 +294,10 @@ contract FlightSuretyApp {
                                         });
     }
 
-    function getMyIndexes
-                            (
-                            )
-                            view
-                            external
-                            returns(uint8[3] memory)
+    function getMyIndexes ()
+        view
+        external
+        returns(uint8[3] memory)
     {
         require(oracles[msg.sender].isRegistered, "Not registered as an oracle");
 
@@ -289,6 +320,7 @@ contract FlightSuretyApp {
                             uint8 statusCode
                         )
                         external
+                        requireOperational
     {
         require((oracles[msg.sender].indexes[0] == index) || (oracles[msg.sender].indexes[1] == index) || (oracles[msg.sender].indexes[2] == index), "Index does not match oracle request");
 

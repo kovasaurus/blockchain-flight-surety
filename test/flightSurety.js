@@ -146,4 +146,87 @@ contract('Flight Surety Tests', async (accounts) => {
     assert.equal(result, true, "Airline should be able to vote for other airline");
   });
 
+  it('(airline) can register new flight', async () => {
+    let result = true;
+    let flightTime = 1609459200000; // 2021-01-01
+    try {
+        await config.flightSuretyApp.registerFlight('Air Kosovo', 'Let do SS', flightTime, {from: accounts[1]});
+    } catch (e) {
+        console.log("e", e);
+        result = false;
+    }
+
+    assert.equal(result, true, "Airline should be able to register new flight");
+  });
+
+  it('(airline) non-owner can not register new flight', async () => {
+    let result = true;
+    let flightTime = 1609459200000; // 2021-01-01
+    try {
+        await config.flightSuretyApp.registerFlight('Air Kosovo', 'Let do SS', flightTime);
+    } catch (e) {
+        result = false;
+    }
+
+    assert.equal(result, false, "Only airline owner should be able to register new flight");
+  });
+
+  it('(insurance) - passanger cant buy insurance for more than 1 ether', async () => {
+    let result = true;
+    let passengerAddress = accounts[7];
+    try {
+        await config.flightSuretyApp.buyInsurance(accounts[1], 'Let do SS', {from: passengerAddress, value: web3.utils.toWei('2', 'ether')})
+    } catch (e) {
+        result = false;
+    }
+    
+    assert.equal(result, false, "Insurance amount too high");
+  });
+
+  it('(insurance) - passanger can buy insurance for flight', async () => {
+    let result = true;
+    let passengerAddress = accounts[8];
+    try {
+        await config.flightSuretyApp.buyInsurance(accounts[1], 'Let do SS', {from: passengerAddress, value: web3.utils.toWei('1', 'ether')});
+    } catch (e) {
+        result = false;
+    }
+    
+    assert.equal(result, true, "Passenger should be able to buy insurance for flight");
+  });
+
+  it('(insurance) - flight can be processed by simulating oracle response', async () => {
+    let result = true;
+    try {
+        await config.flightSuretyApp.processFlightStatus(accounts[1], 'Let do SS', 1633350432, 20);
+    } catch (e) {
+        result = false;
+    }
+
+    assert.equal(result, true, "Passenger should be able to withdraw credited insurance");
+  });
+
+  it('(insurance) - passenger has credited amount', async () => {
+    let result = true;
+    try {
+        let passengerAddress = accounts[8];
+        let credit = await config.flightSuretyApp.getPassengersCredit(passengerAddress);
+    } catch (e) {
+        result = false;
+    }
+
+    assert.equal(result, true, "Passenger should have credit to withdraw");
+  })
+
+  it('(insurance) - passenger can withdraw amount', async () => {
+      let result = true;
+      try {
+        await config.flightSuretyApp.withdrawCredit();
+      } catch (e) {
+          result = false;
+      }
+
+    assert.equal(result, true, "Passenger should be able to withdraw credited amount");
+  })
+
 });
